@@ -67,19 +67,19 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:${PORT:-8080}/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 15s
+      retries: 30
+      start_period: 30s
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 2g
 
   web:
     image: ghcr.io/artifact-keeper/artifact-keeper-web:latest
     restart: unless-stopped
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     environment:
       NEXT_PUBLIC_API_URL: http://backend:${PORT:-8080}
     networks:
@@ -93,7 +93,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128m
+          memory: 512m
 
   meilisearch:
     image: getmeili/meilisearch:v1.12

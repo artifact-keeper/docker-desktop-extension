@@ -1,16 +1,17 @@
 {
-  "icon": "docker.svg",
-  "vm": {
-    "composefile": "docker-compose.yaml",
-    "exposes": {
-      "socket": "backend.sock"
-    }
-  },
+  "icon": "icon.svg",
   "ui": {
     "dashboard-tab": {
       "title": "Artifact Keeper",
       "src": "index.html",
       "root": "ui"
     }
-  }
+  },
+  "vm": {
+    "composefile": "docker-compose.yaml",
+    "exposes": {
+      "socket": "backend.sock"
+    }
+  },
+  "host": {}
 }

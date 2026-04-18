@@ -1,4 +1,4 @@
-IMAGE?=my/awesome-extension
+IMAGE?=artifactkeeper/docker-desktop
 TAG?=latest
 
 BUILDER=buildx-multi-arch
@@ -10,7 +10,7 @@ build-extension: ## Build service image to be deployed as a desktop extension
 	docker build --tag=$(IMAGE):$(TAG) .
 
 install-extension: build-extension ## Install the extension
-	docker extension install $(IMAGE):$(TAG)
+	docker extension install $(IMAGE):$(TAG) || docker extension update $(IMAGE):$(TAG)
 
 update-extension: build-extension ## Update the extension
 	docker extension update $(IMAGE):$(TAG)
@@ -20,6 +20,21 @@ prepare-buildx: ## Create buildx builder for multi-arch build, if not exists
 
 push-extension: prepare-buildx ## Build & Upload extension image to hub. Do not push if tag already exists: make push-extension tag=0.1
 	docker pull $(IMAGE):$(TAG) && echo "Failure: Tag already exists" || docker buildx build --push --builder=$(BUILDER) --platform=linux/amd64,linux/arm64 --build-arg TAG=$(TAG) --tag=$(IMAGE):$(TAG) .
+
+dev-ui: ## Run frontend dev server
+	cd ui && npm run dev
+
+dev-debug: ## Enable Chrome DevTools for the extension
+	docker extension dev debug $(IMAGE):$(TAG)
+
+dev-ui-source: ## Point extension to local dev server
+	docker extension dev ui-source $(IMAGE):$(TAG) http://localhost:3000
+
+dev-reset: ## Reset dev mode
+	docker extension dev reset $(IMAGE):$(TAG)
+
+uninstall: ## Remove the extension
+	docker extension rm $(IMAGE):$(TAG)
 
 help: ## Show this help
 	@echo Please specify a build target. The choices are:

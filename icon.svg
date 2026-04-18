@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- Back face of box -->
+  <path d="M64 16L16 40v48l48 24 48-24V40L64 16z" fill="#2196F3" opacity="0.15"/>
+  <!-- Left face -->
+  <path d="M16 40l48 24v48L16 88V40z" fill="#2196F3" opacity="0.55"/>
+  <!-- Right face -->
+  <path d="M112 40L64 64v48l48-24V40z" fill="#2196F3" opacity="0.35"/>
+  <!-- Top face -->
+  <path d="M64 16L16 40l48 24 48-24L64 16z" fill="#2196F3" opacity="0.75"/>
+  <!-- Box opening flaps -->
+  <path d="M64 16L40 4 16 16l24 12L64 16z" fill="#2196F3" opacity="0.6"/>
+  <path d="M64 16l24-12 24 12-24 12L64 16z" fill="#2196F3" opacity="0.45"/>
+  <!-- Center seam line -->
+  <path d="M64 16v48" stroke="#2196F3" stroke-width="2" opacity="0.8"/>
+  <!-- Edge outlines for crispness -->
+  <path d="M64 16L16 40v48l48 24 48-24V40L64 16z" stroke="#2196F3" stroke-width="2.5" stroke-linejoin="round" fill="none"/>
+  <path d="M16 40l48 24 48-24" stroke="#2196F3" stroke-width="2" stroke-linejoin="round" fill="none"/>
+  <path d="M64 64v48" stroke="#2196F3" stroke-width="2" fill="none"/>
+  <!-- Open flap outlines -->
+  <path d="M16 40L40 28 64 16" stroke="#2196F3" stroke-width="2" stroke-linejoin="round" fill="none" opacity="0.7"/>
+  <path d="M64 16l24-12 24 12" stroke="#2196F3" stroke-width="2" stroke-linejoin="round" fill="none" opacity="0.7"/>
+</svg>

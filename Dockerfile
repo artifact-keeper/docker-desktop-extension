@@ -24,20 +24,19 @@ RUN npm run build
 
 FROM alpine
 LABEL org.opencontainers.image.title="Artifact Keeper" \
-    org.opencontainers.image.description="Docker extension that brings artifact keeper to your desktop locally." \
+    org.opencontainers.image.description="One-click local artifact registry with 45+ package formats, search, and vulnerability scanning." \
     org.opencontainers.image.vendor="Artifact Keeper" \
+    org.opencontainers.image.url="https://artifactkeeper.com" \
     com.docker.desktop.extension.api.version="0.4.2" \
-    com.docker.extension.screenshots="" \
-    com.docker.desktop.extension.icon="" \
-    com.docker.extension.detailed-description="" \
-    com.docker.extension.publisher-url="" \
-    com.docker.extension.additional-urls="" \
-    com.docker.extension.categories="" \
-    com.docker.extension.changelog=""
+    com.docker.extension.categories="development-tools" \
+    com.docker.extension.publisher-url="https://github.com/artifact-keeper" \
+    com.docker.extension.changelog="Initial release"
 
+RUN apk add --no-cache curl
 COPY --from=builder /backend/bin/service /
 COPY docker-compose.yaml .
 COPY metadata.json .
-COPY docker.svg .
+COPY icon.svg .
 COPY --from=client-builder /ui/build ui
+VOLUME /data/config
 CMD /service -socket /run/guest-services/backend.sock

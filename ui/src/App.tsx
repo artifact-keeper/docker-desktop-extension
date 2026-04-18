@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import Box from "@mui/material/Box";
 import { createDockerDesktopClient } from "@docker/extension-api-client";
 import { TopBar } from "./components/TopBar";

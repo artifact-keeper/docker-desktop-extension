@@ -1,16 +1,8 @@
 services:
   # ---------------------------------------------------------------------------
-  # Extension backend (Go service exposed via Docker Desktop socket)
-  # ---------------------------------------------------------------------------
-  extension-backend:
-    image: ${DESKTOP_PLUGIN_IMAGE}
-    volumes:
-      - /run/guest-services:/run/guest-services
-    networks:
-      - ak-ext
-
-  # ---------------------------------------------------------------------------
   # Core services (always running)
+  # Docker Desktop runs the extension image (Go backend) automatically.
+  # Only additional services need to be listed here.
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
@@ -80,7 +72,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 512m
 
   web:
     image: ghcr.io/artifact-keeper/artifact-keeper-web:latest

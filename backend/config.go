@@ -127,7 +127,14 @@ func LoadOrCreateSecrets(path string) (Secrets, bool, error) {
 		return Secrets{}, false, err
 	}
 
-	if err := os.WriteFile(path, secretData, 0600); err != nil {
+	if err := os.WriteFile(path, secretData, 0644); err != nil {
+		return Secrets{}, false, err
+	}
+
+	// Write the admin password as a plain-text sidecar so the backend's
+	// entrypoint wrapper can read it without parsing JSON.
+	passwordPath := filepath.Join(filepath.Dir(path), "admin_password")
+	if err := os.WriteFile(passwordPath, []byte(adminPass), 0644); err != nil {
 		return Secrets{}, false, err
 	}
 

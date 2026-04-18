@@ -52,6 +52,8 @@ services:
       ENVIRONMENT: development
       RUST_LOG: info
       SKIP_ADMIN_PROVISIONING: "false"
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ArtifactKeeper2026!}
+      ALLOW_LOCAL_ADMIN_LOGIN: "true"
       CORS_ORIGINS: "*"
       SCAN_WORKSPACE_PATH: /data/scan-workspace
     volumes:

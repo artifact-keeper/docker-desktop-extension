@@ -39,4 +39,4 @@ COPY metadata.json .
 COPY icon.svg .
 COPY --from=client-builder /ui/build ui
 VOLUME /data/config
-CMD /service -socket /run/guest-services/backend.sock
+CMD ["/service", "-socket", "/run/guest-services/backend.sock"]

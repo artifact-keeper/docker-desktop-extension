@@ -1,9 +1,26 @@
 services:
   # ---------------------------------------------------------------------------
   # Core services (always running)
-  # Docker Desktop runs the extension image (Go backend) automatically.
-  # Only additional services need to be listed here.
+  #
+  # Only `web` is exposed to the host (port 3000) — the extension UI iframes it.
+  # Everything else (postgres, backend, meilisearch) is internal-only.
+  # `extension-service` runs the Go helper that serves the Docker Desktop socket.
   # ---------------------------------------------------------------------------
+  extension-service:
+    image: artifactkeeper/docker-desktop:latest
+    restart: unless-stopped
+    volumes:
+      # Mount the extension's namespaced socket dir (created by Docker Desktop)
+      # so the Go service's backend.sock is visible to DD's host-side forwarder.
+      - /run/guest-services/artifactkeeper_docker-desktop:/run/guest-services
+      - ak-ext-config:/data/config
+    networks:
+      - ak-ext
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -35,8 +52,20 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
-    ports:
-      - "${PORT:-8080}:${PORT:-8080}"
+      extension-service:
+        condition: service_started
+    expose:
+      - "${PORT:-8080}"
+    # The extension-service generates a random admin password into
+    # /data/config/admin_password on first boot. Wait for that file, export it
+    # as ADMIN_PASSWORD, then launch the backend.
+    entrypoint:
+      - sh
+      - -c
+      - >
+        while [ ! -s /data/config/admin_password ]; do sleep 1; done;
+        export ADMIN_PASSWORD="$(cat /data/config/admin_password)";
+        exec /usr/local/bin/artifact-keeper
     environment:
       DATABASE_URL: postgresql://artifact_keeper:artifact_keeper@postgres:5432/artifact_keeper
       STORAGE_BACKEND: filesystem
@@ -52,11 +81,11 @@ services:
       ENVIRONMENT: development
       RUST_LOG: info
       SKIP_ADMIN_PROVISIONING: "false"
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ArtifactKeeper2026!}
       ALLOW_LOCAL_ADMIN_LOGIN: "true"
       CORS_ORIGINS: "*"
       SCAN_WORKSPACE_PATH: /data/scan-workspace
     volumes:
+      - ak-ext-config:/data/config:ro
       - ak-ext-artifacts:/data/artifacts
       - ak-ext-backups:/data/backups
       - ak-ext-plugins:/data/plugins
@@ -64,7 +93,7 @@ services:
     networks:
       - ak-ext
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:${PORT:-8080}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:${PORT:-8080}/health | grep -qE '200|503' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -80,6 +109,8 @@ services:
     depends_on:
       backend:
         condition: service_started
+    ports:
+      - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://backend:${PORT:-8080}
     networks:
@@ -206,6 +237,7 @@ services:
           memory: 256m
 
 volumes:
+  ak-ext-config:
   ak-ext-postgres:
   ak-ext-artifacts:
   ak-ext-meilisearch:

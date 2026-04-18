@@ -44,17 +44,15 @@ services:
       BACKUP_PATH: /data/backups
       PLUGINS_DIR: /data/plugins
       MEILISEARCH_URL: http://meilisearch:7700
-      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      BIND_ADDRESS: ${BIND_ADDRESS:-0.0.0.0}
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-artifact-keeper-ext-key}
+      JWT_SECRET: ${JWT_SECRET:-artifact-keeper-ext-jwt-secret-do-not-use-in-prod}
+      BIND_ADDRESS: 0.0.0.0:${PORT:-8080}
+      HOST: 0.0.0.0
       PORT: ${PORT:-8080}
       ENVIRONMENT: development
       RUST_LOG: info
       SKIP_ADMIN_PROVISIONING: "false"
       CORS_ORIGINS: "*"
-      TRIVY_URL: ${TRIVY_URL:-http://trivy:8090}
-      OPENSCAP_URL: ${OPENSCAP_URL:-http://openscap:8091}
-      DEPENDENCY_TRACK_URL: ${DEPENDENCY_TRACK_URL:-http://dependency-track:8080}
       SCAN_WORKSPACE_PATH: /data/scan-workspace
     volumes:
       - ak-ext-artifacts:/data/artifacts
@@ -99,7 +97,7 @@ services:
     image: getmeili/meilisearch:v1.12
     restart: unless-stopped
     environment:
-      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-}
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-artifact-keeper-ext-key}
       MEILI_ENV: development
     volumes:
       - ak-ext-meilisearch:/meili_data

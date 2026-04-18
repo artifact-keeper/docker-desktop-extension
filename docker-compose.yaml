@@ -1,3 +1,227 @@
 services:
-  my-extension:
+  # ---------------------------------------------------------------------------
+  # Extension backend (Go service exposed via Docker Desktop socket)
+  # ---------------------------------------------------------------------------
+  extension-backend:
     image: ${DESKTOP_PLUGIN_IMAGE}
+    volumes:
+      - /run/guest-services:/run/guest-services
+    networks:
+      - ak-ext
+
+  # ---------------------------------------------------------------------------
+  # Core services (always running)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    stop_grace_period: 5s
+    environment:
+      POSTGRES_DB: artifact_keeper
+      POSTGRES_USER: artifact_keeper
+      POSTGRES_PASSWORD: artifact_keeper
+    volumes:
+      - ak-ext-postgres:/var/lib/postgresql/data
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artifact_keeper -d artifact_keeper"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  backend:
+    image: ghcr.io/artifact-keeper/artifact-keeper-backend:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    environment:
+      DATABASE_URL: postgresql://artifact_keeper:artifact_keeper@postgres:5432/artifact_keeper
+      STORAGE_BACKEND: filesystem
+      STORAGE_PATH: /data/artifacts
+      BACKUP_PATH: /data/backups
+      PLUGINS_DIR: /data/plugins
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      BIND_ADDRESS: ${BIND_ADDRESS:-0.0.0.0}
+      PORT: ${PORT:-8080}
+      ENVIRONMENT: development
+      RUST_LOG: info
+      SKIP_ADMIN_PROVISIONING: "false"
+      CORS_ORIGINS: "*"
+      TRIVY_URL: ${TRIVY_URL:-http://trivy:8090}
+      OPENSCAP_URL: ${OPENSCAP_URL:-http://openscap:8091}
+      DEPENDENCY_TRACK_URL: ${DEPENDENCY_TRACK_URL:-http://dependency-track:8080}
+      SCAN_WORKSPACE_PATH: /data/scan-workspace
+    volumes:
+      - ak-ext-artifacts:/data/artifacts
+      - ak-ext-backups:/data/backups
+      - ak-ext-plugins:/data/plugins
+      - ak-ext-scan-workspace:/data/scan-workspace
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${PORT:-8080}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  web:
+    image: ghcr.io/artifact-keeper/artifact-keeper-web:latest
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:${PORT:-8080}
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-}
+      MEILI_ENV: development
+    volumes:
+      - ak-ext-meilisearch:/meili_data
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:7700/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ---------------------------------------------------------------------------
+  # Scanning profile: vulnerability scanning services
+  # ---------------------------------------------------------------------------
+  trivy:
+    image: ghcr.io/aquasecurity/trivy:0.69.3
+    restart: unless-stopped
+    profiles:
+      - scanning
+    command: ["server", "--listen", "0.0.0.0:8090"]
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
+
+  openscap:
+    image: ghcr.io/artifact-keeper/artifact-keeper-openscap:latest
+    restart: unless-stopped
+    profiles:
+      - scanning
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8091/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
+
+  # ---------------------------------------------------------------------------
+  # SBOM profile: software bill of materials analysis
+  # ---------------------------------------------------------------------------
+  dependency-track:
+    image: dependencytrack/apiserver:4.11.4
+    restart: unless-stopped
+    profiles:
+      - sbom
+    volumes:
+      - ak-ext-dtrack:/data
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/version || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+          cpus: "2.0"
+
+  # ---------------------------------------------------------------------------
+  # Tracing profile: distributed tracing
+  # ---------------------------------------------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    restart: unless-stopped
+    profiles:
+      - tracing
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - ak-ext
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:14269/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+volumes:
+  ak-ext-postgres:
+  ak-ext-artifacts:
+  ak-ext-meilisearch:
+  ak-ext-backups:
+  ak-ext-plugins:
+  ak-ext-scan-workspace:
+  ak-ext-dtrack:
+
+networks:
+  ak-ext:
+    driver: bridge

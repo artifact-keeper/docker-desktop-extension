@@ -1,5 +1,9 @@
 import { useCallback, useState } from "react";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { createDockerDesktopClient } from "@docker/extension-api-client";
 import { TopBar } from "./components/TopBar";
 import { LoadingScreen } from "./components/LoadingScreen";
@@ -7,6 +11,8 @@ import { SettingsDrawer } from "./components/SettingsDrawer";
 import { useHealth } from "./hooks/useHealth";
 import { useConfig } from "./hooks/useConfig";
 import type { Config } from "./types";
+
+const WEB_URL = "http://localhost:3000";
 
 const ddClient = createDockerDesktopClient();
 
@@ -62,18 +68,33 @@ export function App() {
         {!isHealthy || loading ? (
           <LoadingScreen message={loadingMessage} />
         ) : (
-          <iframe
-            src={`http://localhost:${config.port}`}
-            title="Artifact Keeper"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              border: "none",
-            }}
-          />
+          <Stack
+            spacing={3}
+            alignItems="center"
+            justifyContent="center"
+            sx={{ height: "100%", px: 4, textAlign: "center" }}
+          >
+            <Typography variant="h4">Artifact Keeper is ready</Typography>
+            <Typography variant="body1" color="text.secondary">
+              The web UI runs at {WEB_URL}. Open it in your browser to sign in and manage repositories.
+            </Typography>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<OpenInNewIcon />}
+              onClick={() => ddClient.host.openExternal(WEB_URL)}
+            >
+              Open Artifact Keeper
+            </Button>
+            <Stack spacing={0.5} alignItems="center">
+              <Typography variant="caption" color="text.secondary">
+                Initial credentials (please change on first login):
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                admin / {secrets?.adminPassword ?? "…"}
+              </Typography>
+            </Stack>
+          </Stack>
         )}
       </Box>
 

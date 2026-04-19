@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
-	"os/exec"
 	"time"
 )
 
@@ -19,82 +19,80 @@ type HealthReport struct {
 	Services []ServiceHealth `json:"services"`
 }
 
-type containerInfo struct {
-	State  string `json:"State"`
-	Health string `json:"Health"`
+type serviceProbe struct {
+	name  string
+	check func() bool
 }
 
-func checkContainer(name string) ServiceHealth {
-	sh := ServiceHealth{Name: name, Status: "not_running", Running: false}
-
-	cmd := exec.Command("docker", "compose", "ps", "--format", "json", name)
-	output, err := cmd.Output()
-	if err != nil || len(output) == 0 {
-		return sh
+func httpCheck(url string) func() bool {
+	return func() bool {
+		client := http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get(url)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode < 500
 	}
+}
 
-	var info containerInfo
-	if err := json.Unmarshal(output, &info); err != nil {
-		return sh
+func tcpCheck(addr string) func() bool {
+	return func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
 	}
+}
 
-	if info.State != "running" {
-		sh.Status = "not_running"
-		return sh
+func probe(p serviceProbe) ServiceHealth {
+	if p.check() {
+		return ServiceHealth{Name: p.name, Status: "healthy", Running: true}
 	}
-
-	sh.Running = true
-
-	switch info.Health {
-	case "healthy":
-		sh.Status = "healthy"
-	case "starting":
-		sh.Status = "starting"
-	case "unhealthy":
-		sh.Status = "unhealthy"
-	default:
-		// Containers without a healthcheck report empty Health when running.
-		sh.Status = "healthy"
-	}
-
-	return sh
+	return ServiceHealth{Name: p.name, Status: "not_running", Running: false}
 }
 
 func CheckHealth(cfg Config) HealthReport {
 	report := HealthReport{Overall: "healthy"}
 
-	coreServices := []string{"postgres", "backend", "web"}
+	core := []serviceProbe{
+		{"postgres", tcpCheck("postgres:5432")},
+		{"backend", httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
+		{"web", httpCheck("http://web:3000/")},
+	}
 	if cfg.Services.Meilisearch {
-		coreServices = append(coreServices, "meilisearch")
+		core = append(core, serviceProbe{"meilisearch", httpCheck("http://meilisearch:7700/health")})
 	}
 
-	for _, svc := range coreServices {
-		h := checkContainer(svc)
+	for _, p := range core {
+		h := probe(p)
 		report.Services = append(report.Services, h)
 		if h.Status != "healthy" {
 			report.Overall = "unhealthy"
 		}
 	}
 
-	type optionalSvc struct {
-		name    string
-		enabled bool
+	optional := []serviceProbe{}
+	if cfg.Services.Trivy {
+		optional = append(optional, serviceProbe{"trivy", httpCheck("http://trivy:8090/healthz")})
+	}
+	if cfg.Services.OpenSCAP {
+		optional = append(optional, serviceProbe{"openscap", httpCheck("http://openscap:8091/health")})
+	}
+	if cfg.Services.DependencyTrack {
+		optional = append(optional, serviceProbe{"dependency-track", httpCheck("http://dependency-track:8080/api/version")})
+	}
+	if cfg.Services.Jaeger {
+		optional = append(optional, serviceProbe{"jaeger", httpCheck("http://jaeger:14269/")})
 	}
 
-	optional := []optionalSvc{
-		{"trivy", cfg.Services.Trivy},
-		{"openscap", cfg.Services.OpenSCAP},
-		{"dependency-track", cfg.Services.DependencyTrack},
-		{"jaeger", cfg.Services.Jaeger},
-	}
-
-	for _, o := range optional {
-		if o.enabled {
-			h := checkContainer(o.name)
-			report.Services = append(report.Services, h)
-			if h.Status != "healthy" {
-				report.Overall = "unhealthy"
-			}
+	for _, p := range optional {
+		h := probe(p)
+		report.Services = append(report.Services, h)
+		if h.Status != "healthy" {
+			report.Overall = "unhealthy"
 		}
 	}
 
@@ -104,7 +102,7 @@ func CheckHealth(cfg Config) HealthReport {
 func GetBackendVersion(port int) string {
 	client := http.Client{Timeout: 2 * time.Second}
 
-	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/health", port))
+	resp, err := client.Get(fmt.Sprintf("http://backend:%d/health", port))
 	if err != nil {
 		return "unknown"
 	}

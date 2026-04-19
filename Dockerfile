@@ -36,7 +36,7 @@ RUN apk add --no-cache curl
 COPY --from=builder /backend/bin/service /
 COPY docker-compose.yaml .
 COPY metadata.json .
-COPY icon.svg .
+COPY icon.png .
 COPY --from=client-builder /ui/build ui
 VOLUME /data/config
 CMD ["/service", "-socket", "/run/guest-services/backend.sock"]

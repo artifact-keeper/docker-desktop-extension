@@ -1,5 +1,6 @@
-FROM golang:1.24-alpine AS builder
-ENV CGO_ENABLED=0
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+ARG TARGETOS TARGETARCH
+ENV CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH
 WORKDIR /backend
 COPY backend/go.* .
 RUN --mount=type=cache,target=/go/pkg/mod \

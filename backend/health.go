@@ -156,13 +156,44 @@ func GetBackendVersion(port int) string {
 // checkForUpdate queries Docker Hub for the latest tag of an image and compares
 // it to the running version. Returns the latest version and whether an update
 // is available.
+// isSemver checks if a tag looks like a semantic version (e.g., 1.2.3, v1.2.3, 1.12)
+func isSemver(tag string) bool {
+	t := tag
+	if len(t) > 0 && (t[0] == 'v' || t[0] == 'V') {
+		t = t[1:]
+	}
+	if len(t) == 0 {
+		return false
+	}
+	// Must start with a digit and contain only digits, dots, and hyphens (for pre-release)
+	if t[0] < '0' || t[0] > '9' {
+		return false
+	}
+	dots := 0
+	for _, c := range t {
+		if c == '.' {
+			dots++
+		} else if c == '-' {
+			break // pre-release suffix is fine
+		} else if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return dots >= 1 // at least major.minor
+}
+
 func checkForUpdate(repo string, currentTag string) (string, bool) {
 	if currentTag == "" || currentTag == "unknown" || currentTag == "latest" {
 		return "", false
 	}
 
+	// Only compare semver tags
+	if !isSemver(currentTag) {
+		return "", false
+	}
+
 	client := http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags/?page_size=5&ordering=last_updated", repo)
+	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags/?page_size=20&ordering=last_updated", repo)
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", false
@@ -182,16 +213,32 @@ func checkForUpdate(repo string, currentTag string) (string, bool) {
 		return "", false
 	}
 
-	// Find the latest semver-like tag (skip sha-, dev, main, latest)
+	// Find the latest semver tag, ignoring sha-, dev, main, latest, alpine variants
 	for _, t := range result.Results {
 		tag := t.Name
-		if tag == "latest" || tag == "dev" || tag == "main" || len(tag) > 20 {
+		if !isSemver(tag) {
+			continue
+		}
+		// Skip alpine/slim variants (e.g., "1.1.2-alpine")
+		if len(tag) > 0 {
+			for i := range tag {
+				if tag[i] == '-' {
+					// Check if suffix is a pre-release or a variant
+					suffix := tag[i+1:]
+					if suffix == "alpine" || suffix == "slim" || suffix == "bookworm" {
+						tag = "" // skip variant tags
+					}
+					break
+				}
+			}
+		}
+		if tag == "" {
 			continue
 		}
 		if tag == currentTag {
-			return tag, false // already on latest
+			return tag, false // already on latest semver
 		}
-		// Found a newer tag
+		// Found a newer semver tag
 		return tag, true
 	}
 

@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"sync"
 
 	"github.com/labstack/echo/v4"
@@ -122,6 +124,23 @@ func main() {
 		})
 	})
 
+	router.POST("/upgrade/:service", func(c echo.Context) error {
+		service := c.Param("service")
+		if service == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "service name required"})
+		}
+
+		logger.Infof("Upgrading service: %s", service)
+
+		result, err := upgradeService(service)
+		if err != nil {
+			logger.Errorf("Upgrade failed for %s: %v", service, err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{"status": "upgraded", "output": result})
+	})
+
 	ln, err := listen(socketPath)
 	if err != nil {
 		logger.Fatal(err)
@@ -134,4 +153,54 @@ func main() {
 
 func listen(path string) (net.Listener, error) {
 	return net.Listen("unix", path)
+}
+
+func upgradeService(service string) (string, error) {
+	// Map service names to their compose service names and images
+	imageMap := map[string]string{
+		"backend":          "artifactkeeper/backend",
+		"web":              "artifactkeeper/web",
+		"meilisearch":      "getmeili/meilisearch",
+		"postgres":         "postgres",
+		"trivy":            "aquasec/trivy",
+		"openscap":         "artifactkeeper/openscap",
+		"dependency-track": "dependencytrack/apiserver",
+		"jaeger":           "jaegertracing/all-in-one",
+	}
+
+	repo, ok := imageMap[service]
+	if !ok {
+		return "", fmt.Errorf("unknown service: %s", service)
+	}
+
+	// Find the latest semver tag from Docker Hub
+	latest, _ := checkForUpdate(repo, "0.0.0") // pass dummy version to get the latest
+	if latest == "" {
+		latest = "latest"
+	}
+
+	image := fmt.Sprintf("%s:%s", repo, latest)
+
+	// Pull the new image
+	pullCmd := exec.Command("docker", "pull", image)
+	pullOut, err := pullCmd.CombinedOutput()
+	if err != nil {
+		return string(pullOut), fmt.Errorf("pull failed: %w", err)
+	}
+
+	// Restart the service by stopping and starting the container
+	// Use docker compose to handle this gracefully
+	stopCmd := exec.Command("docker", "compose", "stop", service)
+	stopCmd.Run()
+
+	rmCmd := exec.Command("docker", "compose", "rm", "-f", service)
+	rmCmd.Run()
+
+	upCmd := exec.Command("docker", "compose", "up", "-d", service)
+	upOut, err := upCmd.CombinedOutput()
+	if err != nil {
+		return string(upOut), fmt.Errorf("restart failed: %w", err)
+	}
+
+	return fmt.Sprintf("Upgraded %s to %s", service, image), nil
 }

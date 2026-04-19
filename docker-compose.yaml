@@ -104,7 +104,7 @@ services:
           memory: 2g
 
   web:
-    image: artifactkeeper/web:latest
+    image: artifactkeeper/web:1.1.0
     restart: unless-stopped
     depends_on:
       backend:

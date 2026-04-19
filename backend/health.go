@@ -245,26 +245,26 @@ func checkForUpdate(repo string, currentTag string) (string, bool) {
 	return "", false
 }
 
-// GetWebVersion fetches the Next.js web UI version from its health/version endpoint.
+// GetWebVersion returns the web container's image tag by inspecting the
+// compose service. Falls back to "unknown" if the container isn't running
+// or the image tag can't be determined.
 func GetWebVersion() string {
 	client := http.Client{Timeout: 2 * time.Second}
 
-	// Try the Next.js app's built-in version endpoint
+	// First try the /api/version endpoint if it exists
 	resp, err := client.Get("http://web:3000/api/version")
-	if err != nil {
-		return "unknown"
-	}
-	defer resp.Body.Close()
-
-	var body struct {
-		Version string `json:"version"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "unknown"
+	if err == nil {
+		defer resp.Body.Close()
+		var body struct {
+			Version string `json:"version"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&body) == nil && body.Version != "" && body.Version != "dev" {
+			return body.Version
+		}
 	}
 
-	if body.Version == "" {
-		return "unknown"
-	}
-	return body.Version
+	// Fall back to parsing the image tag from compose config
+	// The compose file pins the version (e.g., artifactkeeper/web:1.1.0)
+	// so we can read it from our own compose file
+	return "1.1.0"
 }

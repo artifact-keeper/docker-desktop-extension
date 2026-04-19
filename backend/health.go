@@ -213,30 +213,59 @@ func checkForUpdate(repo string, currentTag string) (string, bool) {
 		return "", false
 	}
 
+	// Normalize a semver tag to major.minor.patch for comparison
+	normalize := func(t string) string {
+		s := t
+		if len(s) > 0 && (s[0] == 'v' || s[0] == 'V') {
+			s = s[1:]
+		}
+		// Strip pre-release suffix
+		for i := range s {
+			if s[i] == '-' {
+				s = s[:i]
+				break
+			}
+		}
+		// Pad to 3 parts (1.1 -> 1.1.0)
+		parts := 0
+		for _, c := range s {
+			if c == '.' {
+				parts++
+			}
+		}
+		for parts < 2 {
+			s += ".0"
+			parts++
+		}
+		return s
+	}
+
+	currentNorm := normalize(currentTag)
+
 	// Find the latest semver tag, ignoring sha-, dev, main, latest, alpine variants
 	for _, t := range result.Results {
 		tag := t.Name
 		if !isSemver(tag) {
 			continue
 		}
-		// Skip alpine/slim variants (e.g., "1.1.2-alpine")
-		if len(tag) > 0 {
-			for i := range tag {
-				if tag[i] == '-' {
-					// Check if suffix is a pre-release or a variant
-					suffix := tag[i+1:]
-					if suffix == "alpine" || suffix == "slim" || suffix == "bookworm" {
-						tag = "" // skip variant tags
-					}
-					break
+		// Skip alpine/slim/bookworm variants
+		hasDash := false
+		for i := range tag {
+			if tag[i] == '-' {
+				suffix := tag[i+1:]
+				if suffix == "alpine" || suffix == "slim" || suffix == "bookworm" {
+					hasDash = true
 				}
+				break
 			}
 		}
-		if tag == "" {
+		if hasDash {
 			continue
 		}
-		if tag == currentTag {
-			return tag, false // already on latest semver
+		// Normalize and compare
+		tagNorm := normalize(tag)
+		if tagNorm == currentNorm {
+			return tag, false // already on latest
 		}
 		// Found a newer semver tag
 		return tag, true

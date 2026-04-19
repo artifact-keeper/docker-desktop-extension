@@ -12,6 +12,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import BugReportIcon from "@mui/icons-material/BugReport";
+import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import { createDockerDesktopClient } from "@docker/extension-api-client";
 import { TopBar } from "./components/TopBar";
 import { LoadingScreen } from "./components/LoadingScreen";
@@ -104,13 +105,14 @@ export function App() {
             </Stack>
 
             {/* Services table */}
-            <TableContainer sx={{ maxWidth: 500, mt: 2 }}>
+            <TableContainer sx={{ maxWidth: 650, mt: 2 }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Service</TableCell>
                     <TableCell>Image</TableCell>
                     <TableCell align="center">Status</TableCell>
+                    <TableCell align="center">Update</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -129,6 +131,22 @@ export function App() {
                           color={s.status === "healthy" ? "success" : s.status === "starting" ? "warning" : "error"}
                           sx={{ fontSize: 11, height: 22 }}
                         />
+                      </TableCell>
+                      <TableCell align="center">
+                        {s.updateAvailable ? (
+                          <Chip
+                            icon={<SystemUpdateAltIcon sx={{ fontSize: 14 }} />}
+                            label={s.latestVersion}
+                            size="small"
+                            color="info"
+                            variant="outlined"
+                            sx={{ fontSize: 11, height: 22 }}
+                          />
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">
+                            current
+                          </Typography>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

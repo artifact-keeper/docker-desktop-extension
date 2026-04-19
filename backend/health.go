@@ -9,10 +9,12 @@ import (
 )
 
 type ServiceHealth struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Running bool   `json:"running"`
-	Image   string `json:"image,omitempty"`
+	Name          string `json:"name"`
+	Status        string `json:"status"`
+	Running       bool   `json:"running"`
+	Image         string `json:"image,omitempty"`
+	LatestVersion string `json:"latestVersion,omitempty"`
+	UpdateAvail   bool   `json:"updateAvailable,omitempty"`
 }
 
 type HealthReport struct {
@@ -21,9 +23,10 @@ type HealthReport struct {
 }
 
 type serviceProbe struct {
-	name  string
-	image string
-	check func() bool
+	name     string
+	image    string
+	hubRepo  string // Docker Hub repo for update checks (e.g., "artifactkeeper/backend")
+	check    func() bool
 }
 
 func httpCheck(url string) func() bool {
@@ -50,10 +53,33 @@ func tcpCheck(addr string) func() bool {
 }
 
 func probe(p serviceProbe) ServiceHealth {
+	h := ServiceHealth{Name: p.name, Image: p.image}
 	if p.check() {
-		return ServiceHealth{Name: p.name, Status: "healthy", Running: true, Image: p.image}
+		h.Status = "healthy"
+		h.Running = true
+	} else {
+		h.Status = "not_running"
+		h.Running = false
 	}
-	return ServiceHealth{Name: p.name, Status: "not_running", Running: false, Image: p.image}
+
+	// Check for updates if we have a Docker Hub repo and a version tag
+	if p.hubRepo != "" {
+		// Extract the tag from the image string (e.g., "artifactkeeper/backend:1.1.2" -> "1.1.2")
+		tag := ""
+		for i := len(p.image) - 1; i >= 0; i-- {
+			if p.image[i] == ':' {
+				tag = p.image[i+1:]
+				break
+			}
+		}
+		if tag != "" {
+			latest, avail := checkForUpdate(p.hubRepo, tag)
+			h.LatestVersion = latest
+			h.UpdateAvail = avail
+		}
+	}
+
+	return h
 }
 
 func CheckHealth(cfg Config) HealthReport {
@@ -63,12 +89,12 @@ func CheckHealth(cfg Config) HealthReport {
 	webVer := GetWebVersion()
 
 	core := []serviceProbe{
-		{"postgres", "postgres:16-alpine", tcpCheck("postgres:5432")},
-		{"backend", "artifactkeeper/backend:" + backendVer, httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
-		{"web", "artifactkeeper/web:" + webVer, httpCheck("http://web:3000/")},
+		{"postgres", "postgres:16-alpine", "library/postgres", tcpCheck("postgres:5432")},
+		{"backend", "artifactkeeper/backend:" + backendVer, "artifactkeeper/backend", httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
+		{"web", "artifactkeeper/web:" + webVer, "artifactkeeper/web", httpCheck("http://web:3000/")},
 	}
 	if cfg.Services.Meilisearch {
-		core = append(core, serviceProbe{"meilisearch", "meilisearch:v1.12", httpCheck("http://meilisearch:7700/health")})
+		core = append(core, serviceProbe{"meilisearch", "meilisearch:v1.12", "getmeili/meilisearch", httpCheck("http://meilisearch:7700/health")})
 	}
 
 	for _, p := range core {
@@ -81,16 +107,16 @@ func CheckHealth(cfg Config) HealthReport {
 
 	optional := []serviceProbe{}
 	if cfg.Services.Trivy {
-		optional = append(optional, serviceProbe{"trivy", "trivy:0.69.3", httpCheck("http://trivy:8090/healthz")})
+		optional = append(optional, serviceProbe{"trivy", "trivy:0.69.3", "aquasec/trivy", httpCheck("http://trivy:8090/healthz")})
 	}
 	if cfg.Services.OpenSCAP {
-		optional = append(optional, serviceProbe{"openscap", "artifact-keeper-openscap:latest", httpCheck("http://openscap:8091/health")})
+		optional = append(optional, serviceProbe{"openscap", "artifactkeeper/openscap:latest", "artifactkeeper/openscap", httpCheck("http://openscap:8091/health")})
 	}
 	if cfg.Services.DependencyTrack {
-		optional = append(optional, serviceProbe{"dependency-track", "dependencytrack:4.11.4", httpCheck("http://dependency-track:8080/api/version")})
+		optional = append(optional, serviceProbe{"dependency-track", "dependencytrack:4.11.4", "dependencytrack/apiserver", httpCheck("http://dependency-track:8080/api/version")})
 	}
 	if cfg.Services.Jaeger {
-		optional = append(optional, serviceProbe{"jaeger", "jaeger:1.62", httpCheck("http://jaeger:14269/")})
+		optional = append(optional, serviceProbe{"jaeger", "jaeger:1.62", "jaegertracing/all-in-one", httpCheck("http://jaeger:14269/")})
 	}
 
 	for _, p := range optional {
@@ -125,6 +151,51 @@ func GetBackendVersion(port int) string {
 	}
 
 	return body.Version
+}
+
+// checkForUpdate queries Docker Hub for the latest tag of an image and compares
+// it to the running version. Returns the latest version and whether an update
+// is available.
+func checkForUpdate(repo string, currentTag string) (string, bool) {
+	if currentTag == "" || currentTag == "unknown" || currentTag == "latest" {
+		return "", false
+	}
+
+	client := http.Client{Timeout: 5 * time.Second}
+	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags/?page_size=5&ordering=last_updated", repo)
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", false
+	}
+
+	var result struct {
+		Results []struct {
+			Name string `json:"name"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", false
+	}
+
+	// Find the latest semver-like tag (skip sha-, dev, main, latest)
+	for _, t := range result.Results {
+		tag := t.Name
+		if tag == "latest" || tag == "dev" || tag == "main" || len(tag) > 20 {
+			continue
+		}
+		if tag == currentTag {
+			return tag, false // already on latest
+		}
+		// Found a newer tag
+		return tag, true
+	}
+
+	return "", false
 }
 
 // GetWebVersion fetches the Next.js web UI version from its health/version endpoint.

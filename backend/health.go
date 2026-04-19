@@ -12,6 +12,7 @@ type ServiceHealth struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"`
 	Running bool   `json:"running"`
+	Image   string `json:"image,omitempty"`
 }
 
 type HealthReport struct {
@@ -21,6 +22,7 @@ type HealthReport struct {
 
 type serviceProbe struct {
 	name  string
+	image string
 	check func() bool
 }
 
@@ -49,21 +51,21 @@ func tcpCheck(addr string) func() bool {
 
 func probe(p serviceProbe) ServiceHealth {
 	if p.check() {
-		return ServiceHealth{Name: p.name, Status: "healthy", Running: true}
+		return ServiceHealth{Name: p.name, Status: "healthy", Running: true, Image: p.image}
 	}
-	return ServiceHealth{Name: p.name, Status: "not_running", Running: false}
+	return ServiceHealth{Name: p.name, Status: "not_running", Running: false, Image: p.image}
 }
 
 func CheckHealth(cfg Config) HealthReport {
 	report := HealthReport{Overall: "healthy"}
 
 	core := []serviceProbe{
-		{"postgres", tcpCheck("postgres:5432")},
-		{"backend", httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
-		{"web", httpCheck("http://web:3000/")},
+		{"postgres", "postgres:16-alpine", tcpCheck("postgres:5432")},
+		{"backend", "artifact-keeper-backend:latest", httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
+		{"web", "artifact-keeper-web:latest", httpCheck("http://web:3000/")},
 	}
 	if cfg.Services.Meilisearch {
-		core = append(core, serviceProbe{"meilisearch", httpCheck("http://meilisearch:7700/health")})
+		core = append(core, serviceProbe{"meilisearch", "meilisearch:v1.12", httpCheck("http://meilisearch:7700/health")})
 	}
 
 	for _, p := range core {
@@ -76,16 +78,16 @@ func CheckHealth(cfg Config) HealthReport {
 
 	optional := []serviceProbe{}
 	if cfg.Services.Trivy {
-		optional = append(optional, serviceProbe{"trivy", httpCheck("http://trivy:8090/healthz")})
+		optional = append(optional, serviceProbe{"trivy", "trivy:0.69.3", httpCheck("http://trivy:8090/healthz")})
 	}
 	if cfg.Services.OpenSCAP {
-		optional = append(optional, serviceProbe{"openscap", httpCheck("http://openscap:8091/health")})
+		optional = append(optional, serviceProbe{"openscap", "artifact-keeper-openscap:latest", httpCheck("http://openscap:8091/health")})
 	}
 	if cfg.Services.DependencyTrack {
-		optional = append(optional, serviceProbe{"dependency-track", httpCheck("http://dependency-track:8080/api/version")})
+		optional = append(optional, serviceProbe{"dependency-track", "dependencytrack:4.11.4", httpCheck("http://dependency-track:8080/api/version")})
 	}
 	if cfg.Services.Jaeger {
-		optional = append(optional, serviceProbe{"jaeger", httpCheck("http://jaeger:14269/")})
+		optional = append(optional, serviceProbe{"jaeger", "jaeger:1.62", httpCheck("http://jaeger:14269/")})
 	}
 
 	for _, p := range optional {

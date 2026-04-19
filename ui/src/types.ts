@@ -17,6 +17,7 @@ export interface ServiceHealth {
   name: string;
   status: "healthy" | "unhealthy" | "starting" | "not_running";
   running: boolean;
+  image?: string;
 }
 
 export interface HealthReport {

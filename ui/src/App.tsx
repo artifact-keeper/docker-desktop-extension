@@ -1,9 +1,17 @@
 import { useCallback, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import BugReportIcon from "@mui/icons-material/BugReport";
 import { createDockerDesktopClient } from "@docker/extension-api-client";
 import { TopBar } from "./components/TopBar";
 import { LoadingScreen } from "./components/LoadingScreen";
@@ -61,18 +69,18 @@ export function App() {
     >
       <TopBar
         services={health?.services ?? []}
+        info={info}
         onSettingsClick={() => setSettingsOpen(true)}
       />
 
-      <Box sx={{ flex: 1, position: "relative" }}>
+      <Box sx={{ flex: 1, position: "relative", overflow: "auto" }}>
         {!isHealthy || loading ? (
           <LoadingScreen message={loadingMessage} />
         ) : (
           <Stack
             spacing={3}
             alignItems="center"
-            justifyContent="center"
-            sx={{ height: "100%", px: 4, textAlign: "center" }}
+            sx={{ py: 4, px: 4, textAlign: "center" }}
           >
             <Typography variant="h4">Artifact Keeper is ready</Typography>
             <Typography variant="body1" color="text.secondary">
@@ -91,9 +99,53 @@ export function App() {
                 Initial credentials (please change on first login):
               </Typography>
               <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                admin / {secrets?.adminPassword ?? "…"}
+                admin / {secrets?.adminPassword ?? "..."}
               </Typography>
             </Stack>
+
+            {/* Services table */}
+            <TableContainer sx={{ maxWidth: 500, mt: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Service</TableCell>
+                    <TableCell>Image</TableCell>
+                    <TableCell align="center">Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(health?.services ?? []).map((s) => (
+                    <TableRow key={s.name}>
+                      <TableCell sx={{ fontWeight: 500 }}>{s.name}</TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace", fontSize: 11 }}>
+                          {s.image || "-"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={s.status}
+                          size="small"
+                          color={s.status === "healthy" ? "success" : s.status === "starting" ? "warning" : "error"}
+                          sx={{ fontSize: 11, height: 22 }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {/* Report a bug */}
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<BugReportIcon />}
+              onClick={() => ddClient.host.openExternal("https://github.com/artifact-keeper/artifact-keeper/issues/new")}
+              sx={{ mt: 1 }}
+            >
+              Report a Bug
+            </Button>
           </Stack>
         )}
       </Box>

@@ -13,5 +13,7 @@
       "socket": "backend.sock"
     }
   },
-  "host": {}
+  "host": {
+    "binaries": []
+  }
 }

@@ -28,9 +28,13 @@ LABEL org.opencontainers.image.title="Artifact Keeper" \
     org.opencontainers.image.vendor="Artifact Keeper" \
     org.opencontainers.image.url="https://artifactkeeper.com" \
     com.docker.desktop.extension.api.version="0.4.2" \
+    com.docker.desktop.extension.icon="https://raw.githubusercontent.com/artifact-keeper/docker-desktop-extension/main/icon.png" \
     com.docker.extension.categories="development-tools" \
     com.docker.extension.publisher-url="https://github.com/artifact-keeper" \
-    com.docker.extension.changelog="Initial release"
+    com.docker.extension.changelog="Initial release" \
+    com.docker.extension.detailed-description="Artifact Keeper is a universal artifact registry that supports 45+ package formats including Maven, npm, PyPI, Docker/OCI, Cargo, Go, NuGet, Helm, and more. This extension runs the full stack locally with one click: backend API, web UI, PostgreSQL, Meilisearch (full-text search), and optional vulnerability scanning via Trivy and OpenSCAP. Perfect for local development, CI/CD testing, or evaluating Artifact Keeper before deploying to production." \
+    com.docker.extension.screenshots='[{"alt":"Dashboard showing services and health status","url":"https://raw.githubusercontent.com/artifact-keeper/docker-desktop-extension/main/screenshots/dashboard.png"}]' \
+    com.docker.extension.additional-urls='[{"title":"Documentation","url":"https://artifactkeeper.com/docs"},{"title":"GitHub","url":"https://github.com/artifact-keeper/artifact-keeper"},{"title":"Report a Bug","url":"https://github.com/artifact-keeper/artifact-keeper/issues"}]'
 
 RUN apk add --no-cache curl
 COPY --from=builder /backend/bin/service /

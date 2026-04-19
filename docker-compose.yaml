@@ -45,7 +45,7 @@ services:
           memory: 512m
 
   backend:
-    image: ghcr.io/artifact-keeper/artifact-keeper-backend:latest
+    image: artifactkeeper/backend:dev
     restart: unless-stopped
     depends_on:
       postgres:
@@ -104,7 +104,7 @@ services:
           memory: 2g
 
   web:
-    image: ghcr.io/artifact-keeper/artifact-keeper-web:latest
+    image: artifactkeeper/web:latest
     restart: unless-stopped
     depends_on:
       backend:
@@ -151,7 +151,7 @@ services:
   # Scanning profile: vulnerability scanning services
   # ---------------------------------------------------------------------------
   trivy:
-    image: ghcr.io/aquasecurity/trivy:0.69.3
+    image: aquasec/trivy:0.69.3
     restart: unless-stopped
     profiles:
       - scanning
@@ -171,7 +171,7 @@ services:
           cpus: "1.0"
 
   openscap:
-    image: ghcr.io/artifact-keeper/artifact-keeper-openscap:latest
+    image: artifactkeeper/openscap:latest
     restart: unless-stopped
     profiles:
       - scanning

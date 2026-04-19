@@ -64,8 +64,8 @@ func CheckHealth(cfg Config) HealthReport {
 
 	core := []serviceProbe{
 		{"postgres", "postgres:16-alpine", tcpCheck("postgres:5432")},
-		{"backend", "artifact-keeper-backend:" + backendVer, httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
-		{"web", "artifact-keeper-web:" + webVer, httpCheck("http://web:3000/")},
+		{"backend", "artifactkeeper/backend:" + backendVer, httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
+		{"web", "artifactkeeper/web:" + webVer, httpCheck("http://web:3000/")},
 	}
 	if cfg.Services.Meilisearch {
 		core = append(core, serviceProbe{"meilisearch", "meilisearch:v1.12", httpCheck("http://meilisearch:7700/health")})

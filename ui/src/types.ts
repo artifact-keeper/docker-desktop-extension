@@ -33,6 +33,7 @@ export interface SecretsInfo {
 export interface ExtensionInfo {
   extensionVersion: string;
   backendVersion: string;
+  webVersion: string;
   port: number;
   bindAddress: string;
 }

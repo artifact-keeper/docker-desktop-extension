@@ -59,10 +59,13 @@ func probe(p serviceProbe) ServiceHealth {
 func CheckHealth(cfg Config) HealthReport {
 	report := HealthReport{Overall: "healthy"}
 
+	backendVer := GetBackendVersion(cfg.Port)
+	webVer := GetWebVersion()
+
 	core := []serviceProbe{
 		{"postgres", "postgres:16-alpine", tcpCheck("postgres:5432")},
-		{"backend", "artifact-keeper-backend:latest", httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
-		{"web", "artifact-keeper-web:latest", httpCheck("http://web:3000/")},
+		{"backend", "artifact-keeper-backend:" + backendVer, httpCheck(fmt.Sprintf("http://backend:%d/health", cfg.Port))},
+		{"web", "artifact-keeper-web:" + webVer, httpCheck("http://web:3000/")},
 	}
 	if cfg.Services.Meilisearch {
 		core = append(core, serviceProbe{"meilisearch", "meilisearch:v1.12", httpCheck("http://meilisearch:7700/health")})
@@ -121,5 +124,29 @@ func GetBackendVersion(port int) string {
 		return "unknown"
 	}
 
+	return body.Version
+}
+
+// GetWebVersion fetches the Next.js web UI version from its health/version endpoint.
+func GetWebVersion() string {
+	client := http.Client{Timeout: 2 * time.Second}
+
+	// Try the Next.js app's built-in version endpoint
+	resp, err := client.Get("http://web:3000/api/version")
+	if err != nil {
+		return "unknown"
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "unknown"
+	}
+
+	if body.Version == "" {
+		return "unknown"
+	}
 	return body.Version
 }

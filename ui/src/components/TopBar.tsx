@@ -22,7 +22,10 @@ export function TopBar({ services, info, onSettingsClick }: TopBarProps) {
           Artifact Keeper
         </Typography>
         {info?.backendVersion && info.backendVersion !== "unknown" && (
-          <Chip label={`v${info.backendVersion}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />
+          <Chip label={`backend v${info.backendVersion}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20, mr: 0.5 }} />
+        )}
+        {info?.webVersion && info.webVersion !== "unknown" && (
+          <Chip label={`web v${info.webVersion}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />
         )}
         <Box sx={{ flexGrow: 1, display: "flex", justifyContent: "center" }}>
           <HealthDots services={services} />

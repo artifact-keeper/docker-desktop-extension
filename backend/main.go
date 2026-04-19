@@ -111,10 +111,12 @@ func main() {
 		mu.RUnlock()
 
 		backendVersion := GetBackendVersion(currentCfg.Port)
+		webVersion := GetWebVersion()
 
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"extensionVersion": version,
 			"backendVersion":   backendVersion,
+			"webVersion":       webVersion,
 			"port":             currentCfg.Port,
 			"bindAddress":      currentCfg.BindAddress,
 		})

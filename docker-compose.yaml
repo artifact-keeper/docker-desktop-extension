@@ -10,10 +10,12 @@ services:
     image: artifactkeeper/docker-desktop:latest
     restart: unless-stopped
     volumes:
-      # Mount the extension's namespaced socket dir (created by Docker Desktop)
-      # so the Go service's backend.sock is visible to DD's host-side forwarder.
       - /run/guest-services/artifactkeeper_docker-desktop:/run/guest-services
       - ak-ext-config:/data/config
+      - ak-ext-artifacts:/data/artifacts
+      - ak-ext-backups:/data/backups
+      - ak-ext-plugins:/data/plugins
+      - ak-ext-scan-workspace:/data/scan-workspace
     networks:
       - ak-ext
     deploy:
@@ -59,12 +61,10 @@ services:
     # The extension-service generates a random admin password into
     # /data/config/admin_password on first boot. Wait for that file, export it
     # as ADMIN_PASSWORD, then launch the backend.
-    user: "0:0"
     entrypoint:
       - sh
       - -c
       - >
-        chown -R 1001:0 /data/artifacts /data/backups /data/plugins /data/scan-workspace /data/storage 2>/dev/null || true;
         while [ ! -s /data/config/admin_password ]; do sleep 1; done;
         export ADMIN_PASSWORD="$(cat /data/config/admin_password)";
         exec /usr/local/bin/artifact-keeper

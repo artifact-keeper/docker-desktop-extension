@@ -31,6 +31,15 @@ func main() {
 
 	logger.SetOutput(os.Stdout)
 
+	// Fix volume permissions - Docker creates named volumes as root
+	// but the backend container runs as uid 1001. The extension-service
+	// mounts the same volumes and runs as root, so we can chmod here.
+	for _, dir := range []string{"/data/artifacts", "/data/backups", "/data/plugins", "/data/scan-workspace"} {
+		if err := os.Chmod(dir, 0777); err != nil {
+			logger.Debugf("Could not chmod %s: %v (may not be mounted)", dir, err)
+		}
+	}
+
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
 		logger.Warnf("Failed to load config, using defaults: %v", err)

@@ -17,7 +17,7 @@ import (
 const (
 	configPath  = "/data/config/config.json"
 	secretsPath = "/data/config/secrets.json"
-	version     = "1.0.5"
+	version     = "1.0.6"
 )
 
 var logger = logrus.New()

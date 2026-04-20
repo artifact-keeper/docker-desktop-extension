@@ -12,7 +12,7 @@ services:
     volumes:
       - /run/guest-services/artifactkeeper_docker-desktop:/run/guest-services
       - ak-ext-config:/data/config
-      - ak-ext-artifacts:/data/artifacts
+      - ak-ext-artifacts:/data/storage
       - ak-ext-backups:/data/backups
       - ak-ext-plugins:/data/plugins
       - ak-ext-scan-workspace:/data/scan-workspace
@@ -71,7 +71,7 @@ services:
     environment:
       DATABASE_URL: postgresql://artifact_keeper:artifact_keeper@postgres:5432/artifact_keeper
       STORAGE_BACKEND: filesystem
-      STORAGE_PATH: /data/artifacts
+      STORAGE_PATH: /data/storage
       BACKUP_PATH: /data/backups
       PLUGINS_DIR: /data/plugins
       MEILISEARCH_URL: http://meilisearch:7700
@@ -88,7 +88,7 @@ services:
       SCAN_WORKSPACE_PATH: /data/scan-workspace
     volumes:
       - ak-ext-config:/data/config:ro
-      - ak-ext-artifacts:/data/artifacts
+      - ak-ext-artifacts:/data/storage
       - ak-ext-backups:/data/backups
       - ak-ext-plugins:/data/plugins
       - ak-ext-scan-workspace:/data/scan-workspace

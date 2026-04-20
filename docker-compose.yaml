@@ -59,10 +59,12 @@ services:
     # The extension-service generates a random admin password into
     # /data/config/admin_password on first boot. Wait for that file, export it
     # as ADMIN_PASSWORD, then launch the backend.
+    user: "0:0"
     entrypoint:
       - sh
       - -c
       - >
+        chown -R 1001:0 /data/artifacts /data/backups /data/plugins /data/scan-workspace /data/storage 2>/dev/null || true;
         while [ ! -s /data/config/admin_password ]; do sleep 1; done;
         export ADMIN_PASSWORD="$(cat /data/config/admin_password)";
         exec /usr/local/bin/artifact-keeper

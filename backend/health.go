@@ -335,8 +335,5 @@ func GetWebVersion() string {
 		}
 	}
 
-	// Fall back to parsing the image tag from compose config
-	// The compose file pins the version (e.g., artifactkeeper/web:1.1.0)
-	// so we can read it from our own compose file
-	return "1.1.0"
+	return "unknown"
 }

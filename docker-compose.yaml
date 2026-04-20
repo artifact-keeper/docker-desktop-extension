@@ -116,7 +116,7 @@ services:
     networks:
       - ak-ext
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:3000/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

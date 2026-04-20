@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
-import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -30,7 +29,6 @@ export function App() {
   const { health, loading: healthLoading, refresh: refreshHealth } = useHealth();
   const { config, secrets, info, loading: configLoading, saveConfig, refresh: refreshConfig } = useConfig();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [upgrading, setUpgrading] = useState<string | null>(null);
 
   const isHealthy = health?.overall === "healthy";
   const loading = healthLoading || configLoading;
@@ -43,18 +41,6 @@ export function App() {
     },
     [saveConfig, refreshHealth, refreshConfig]
   );
-
-  const handleUpgrade = useCallback(async (serviceName: string) => {
-    setUpgrading(serviceName);
-    try {
-      await ddClient.extension.vm?.service?.post(`/upgrade/${serviceName}`, {});
-      refreshHealth();
-    } catch (err) {
-      console.error(`Failed to upgrade ${serviceName}:`, err);
-    } finally {
-      setUpgrading(null);
-    }
-  }, [refreshHealth]);
 
   const handleReset = useCallback(async () => {
     try {
@@ -147,16 +133,13 @@ export function App() {
                         />
                       </TableCell>
                       <TableCell align="center">
-                        {upgrading === s.name ? (
-                          <CircularProgress size={18} />
-                        ) : s.updateAvailable ? (
+                        {s.updateAvailable ? (
                           <Chip
                             icon={<SystemUpdateAltIcon sx={{ fontSize: 14 }} />}
-                            label={`Upgrade to ${s.latestVersion}`}
+                            label={`${s.latestVersion} available`}
                             size="small"
                             color="info"
-                            clickable
-                            onClick={() => handleUpgrade(s.name)}
+                            variant="outlined"
                             sx={{ fontSize: 11, height: 22 }}
                           />
                         ) : (

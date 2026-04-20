@@ -37,7 +37,10 @@ func httpCheck(url string) func() bool {
 			return false
 		}
 		defer resp.Body.Close()
-		return resp.StatusCode < 500
+		// 503 from the backend means it's running but in setup mode
+		// (admin password needs to be changed). Still counts as healthy
+		// for the extension dashboard.
+		return resp.StatusCode < 500 || resp.StatusCode == 503
 	}
 }
 

@@ -270,11 +270,51 @@ func checkForUpdate(repo string, currentTag string) (string, bool) {
 		if tagNorm == currentNorm {
 			return tag, false // already on latest
 		}
-		// Found a newer semver tag
-		return tag, true
+		// Compare versions numerically to check if tag is actually newer
+		if isNewerVersion(tagNorm, currentNorm) {
+			return tag, true
+		}
+		// Tag exists but is older, keep looking
 	}
 
 	return "", false
+}
+
+// isNewerVersion compares two normalized semver strings (e.g., "1.2.3" vs "1.1.0")
+// Returns true if a is newer than b.
+func isNewerVersion(a, b string) bool {
+	aParts := splitVersion(a)
+	bParts := splitVersion(b)
+	for i := 0; i < 3; i++ {
+		if aParts[i] > bParts[i] {
+			return true
+		}
+		if aParts[i] < bParts[i] {
+			return false
+		}
+	}
+	return false // equal
+}
+
+func splitVersion(v string) [3]int {
+	var parts [3]int
+	idx := 0
+	num := 0
+	for _, c := range v {
+		if c == '.' {
+			if idx < 3 {
+				parts[idx] = num
+			}
+			idx++
+			num = 0
+		} else if c >= '0' && c <= '9' {
+			num = num*10 + int(c-'0')
+		}
+	}
+	if idx < 3 {
+		parts[idx] = num
+	}
+	return parts
 }
 
 // GetWebVersion returns the web container's image tag by inspecting the

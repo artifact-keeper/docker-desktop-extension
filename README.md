@@ -1,5 +1,9 @@
 # Artifact Keeper Docker Desktop Extension
 
+<p align="center">
+  <img alt="Artifact Keeper" src="https://raw.githubusercontent.com/artifact-keeper/.github/main/brand/banners/github-readme_1600x600.png" width="100%">
+</p>
+
 Run a full [Artifact Keeper](https://artifactkeeper.com) artifact registry locally with one click. Supports 45+ package formats including Maven, npm, PyPI, Docker/OCI, Cargo, Go, NuGet, Helm, and more.
 
 ## Install

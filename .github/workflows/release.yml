@@ -1,0 +1,122 @@
+# Publishes artifactkeeper/docker-desktop:<version> and :latest (amd64 + arm64)
+# and creates the v<version> GitHub release, where <version> is the `version`
+# constant in backend/main.go. Idempotent: if Docker Hub already has the tag,
+# nothing is published.
+#
+# Requires repo secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/main.go
+      - backend/**
+      - Dockerfile
+      - docker-compose.yaml
+      - metadata.json
+      - ui/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: artifactkeeper/docker-desktop
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version and check Docker Hub
+        id: version
+        run: |
+          version="$(sed -nE 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' backend/main.go)"
+          if [ "$(printf '%s\n' "$version" | grep -c .)" -ne 1 ]; then
+            echo "::error::could not read a single version = \"X.Y.Z\" from backend/main.go"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          status="$(curl -s -o /dev/null -w '%{http_code}' --retry 3 --retry-all-errors \
+            "https://hub.docker.com/v2/repositories/$IMAGE/tags/$version")"
+          case "$status" in
+            200) echo "$IMAGE:$version already exists on Docker Hub; skipping release."
+                 echo "publish=false" >> "$GITHUB_OUTPUT" ;;
+            404) echo "$IMAGE:$version not on Docker Hub; releasing."
+                 echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "::error::Docker Hub returned HTTP $status for $IMAGE:$version; refusing to guess."
+                 exit 1 ;;
+          esac
+
+      - name: Check Docker Hub secrets
+        if: steps.version.outputs.publish == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "::error::Repo secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set to publish $IMAGE (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+      - uses: docker/setup-qemu-action@v3
+        if: steps.version.outputs.publish == 'true'
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.version.outputs.publish == 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.version.outputs.publish == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        if: steps.version.outputs.publish == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pin() { sed -nE "s#^[[:space:]]*image:[[:space:]]*artifactkeeper/$1:([^[:space:]]+).*#\\1#p" docker-compose.yaml; }
+          backend="$(pin backend)"
+          web="$(pin web)"
+          {
+            echo "Docker Desktop extension \`$IMAGE:$VERSION\` (linux/amd64, linux/arm64)."
+            echo
+            echo "| Component | Image | Upstream release |"
+            echo "|---|---|---|"
+            echo "| Backend | \`artifactkeeper/backend:$backend\` | [v$backend](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v$backend) |"
+            echo "| Web | \`artifactkeeper/web:$web\` | [v$web](https://github.com/artifact-keeper/artifact-keeper-web/releases/tag/v$web) |"
+            echo
+            echo "Install or update:"
+            echo
+            echo '```bash'
+            echo "docker extension install $IMAGE:$VERSION"
+            echo '```'
+          } > "$RUNNER_TEMP/notes.md"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists; leaving it as is."
+          else
+            gh release create "v$VERSION" --target "$GITHUB_SHA" \
+              --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          fi

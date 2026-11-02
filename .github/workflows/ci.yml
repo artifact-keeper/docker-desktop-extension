@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build extension image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (linux/amd64, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: artifactkeeper/docker-desktop:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # `docker extension validate` needs a running Docker Desktop (it calls the
+      # extension-manager socket), so it cannot run on a hosted runner. This
+      # check covers the same ground: metadata.json, referenced files, LABELs.
+      - name: Check metadata and extension labels
+        run: scripts/check-extension-image.sh artifactkeeper/docker-desktop:ci
+
+  smoke:
+    name: Smoke test pinned upstream stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run compose smoke test
+        run: .github/smoke/smoke.sh

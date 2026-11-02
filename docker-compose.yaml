@@ -18,6 +18,15 @@ services:
       - ak-ext-scan-workspace:/data/scan-workspace
     networks:
       - ak-ext
+    # Healthy once the generated admin password exists on the shared config
+    # volume. The backend depends on this (service_healthy) because its image
+    # has no shell to wait in; see the backend service below.
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /data/config/admin_password"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
     deploy:
       resources:
         limits:
@@ -47,7 +56,7 @@ services:
           memory: 512m
 
   backend:
-    image: artifactkeeper/backend:1.1.7
+    image: artifactkeeper/backend:1.11.10
     restart: unless-stopped
     depends_on:
       postgres:
@@ -55,20 +64,22 @@ services:
       meilisearch:
         condition: service_healthy
       extension-service:
-        condition: service_started
+        condition: service_healthy
     expose:
       - "${PORT:-8080}"
-    # The extension-service generates a random admin password into
-    # /data/config/admin_password on first boot. Wait for that file, export it
-    # as ADMIN_PASSWORD, then launch the backend.
-    entrypoint:
-      - sh
-      - -c
-      - >
-        while [ ! -s /data/config/admin_password ]; do sleep 1; done;
-        export ADMIN_PASSWORD="$(cat /data/config/admin_password)";
-        exec /usr/local/bin/artifact-keeper
+    # No entrypoint override: the backend image (1.10+) is a hardened
+    # ubi-micro build with no /bin/sh, so the old `sh -c "wait for the
+    # password file; export ADMIN_PASSWORD; exec"` wrapper cannot run. The
+    # extension-service writes /data/config/admin_password on first boot and
+    # reports healthy once it exists, so the file is there before the backend
+    # starts, and the backend reads it through INITIAL_ADMIN_PASSWORD_FILE.
+    # That preset is applied only while the admin account is first created
+    # (a restart or upgrade never resets a changed password) and the account
+    # stays flagged must_change_password, so the first login goes through the
+    # change-password screen, which is what the extension UI already tells
+    # the user to do.
     environment:
+      INITIAL_ADMIN_PASSWORD_FILE: /data/config/admin_password
       DATABASE_URL: postgresql://artifact_keeper:artifact_keeper@postgres:5432/artifact_keeper
       STORAGE_BACKEND: filesystem
       STORAGE_PATH: /data/storage
@@ -106,7 +117,7 @@ services:
           memory: 2g
 
   web:
-    image: artifactkeeper/web:1.1.3
+    image: artifactkeeper/web:1.11.2
     restart: unless-stopped
     depends_on:
       backend:

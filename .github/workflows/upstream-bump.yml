@@ -86,7 +86,7 @@ jobs:
 
       - name: Set up Buildx
         if: steps.bump.outputs.changed == 'true' && steps.existing.outputs.skip != 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build extension image (validation, no push)
         if: steps.bump.outputs.changed == 'true' && steps.existing.outputs.skip != 'true'

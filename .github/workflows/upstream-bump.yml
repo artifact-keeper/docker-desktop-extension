@@ -1,0 +1,168 @@
+# Bumps the upstream backend/web pins in docker-compose.yaml when new
+# Artifact Keeper releases are published, and opens (or updates) a PR from the
+# fixed branch bot/upstream-bump.
+#
+# PRs opened or pushed with GITHUB_TOKEN do not trigger `pull_request`
+# workflows, so ci.yml will not run on the bot PR. That is why this workflow
+# builds the extension image and runs the compose smoke test itself before it
+# touches the PR. Merging the PR bumps backend/main.go on main, which triggers
+# release.yml.
+name: Upstream bump
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      backend_version:
+        description: "Backend version to pin (X.Y.Z). Empty = latest GitHub release."
+        required: false
+        default: ""
+      web_version:
+        description: "Web version to pin (X.Y.Z). Empty = latest GitHub release."
+        required: false
+        default: ""
+  # Upstream repos can ping this with:
+  #   gh api repos/artifact-keeper/docker-desktop-extension/dispatches \
+  #     -f event_type=upstream-release
+  # optionally with client_payload[backend_version] / client_payload[web_version].
+  repository_dispatch:
+    types: [upstream-release]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-bump
+  cancel-in-progress: false
+
+env:
+  BOT_BRANCH: bot/upstream-bump
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Detect upstream releases and edit pins
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BACKEND_VERSION: ${{ inputs.backend_version || github.event.client_payload.backend_version }}
+          WEB_VERSION: ${{ inputs.web_version || github.event.client_payload.web_version }}
+        run: |
+          args=()
+          [ -n "$BACKEND_VERSION" ] && args+=(--backend "$BACKEND_VERSION")
+          [ -n "$WEB_VERSION" ] && args+=(--web "$WEB_VERSION")
+          scripts/upstream-bump.sh "${args[@]}"
+
+      - name: Compare with open bot PR
+        id: existing
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "chore: bump backend to ${{ steps.bump.outputs.backend_new }}, web to ${{ steps.bump.outputs.web_new }} (extension ${{ steps.bump.outputs.ext_new }})"
+        run: |
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          pr="$(gh pr list --head "$BOT_BRANCH" --base main --state open --json number,title \
+            --jq '.[0] // empty | "\(.number)\t\(.title)"')"
+          number="${pr%%$'\t'*}"
+          title="${pr#*$'\t'}"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          skip=false
+          if [ -n "$number" ] && [ "$title" = "$TITLE" ] \
+            && git fetch --quiet origin "$BOT_BRANCH" \
+            && [ "$(git rev-parse FETCH_HEAD^)" = "$(git rev-parse HEAD)" ]; then
+            echo "PR #$number already targets these versions on top of current main; nothing to do."
+            skip=true
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        if: steps.bump.outputs.changed == 'true' && steps.existing.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build extension image (validation, no push)
+        if: steps.bump.outputs.changed == 'true' && steps.existing.outputs.skip != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: artifactkeeper/docker-desktop:bump
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check metadata and extension labels
+        if: steps.bump.outputs.changed == 'true' && steps.existing.outputs.skip != 'true'
+        run: scripts/check-extension-image.sh artifactkeeper/docker-desktop:bump
+
+      - name: Smoke test new pins
+        if: steps.bump.outputs.changed == 'true' && steps.existing.outputs.skip != 'true'
+        run: .github/smoke/smoke.sh
+
+      - name: Push branch and open or update PR
+        if: steps.bump.outputs.changed == 'true' && steps.existing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ steps.existing.outputs.title }}
+          PR_NUMBER: ${{ steps.existing.outputs.number }}
+          BACKEND_OLD: ${{ steps.bump.outputs.backend_old }}
+          BACKEND_NEW: ${{ steps.bump.outputs.backend_new }}
+          WEB_OLD: ${{ steps.bump.outputs.web_old }}
+          WEB_NEW: ${{ steps.bump.outputs.web_new }}
+          EXT_OLD: ${{ steps.bump.outputs.ext_old }}
+          EXT_NEW: ${{ steps.bump.outputs.ext_new }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BOT_BRANCH"
+          git add docker-compose.yaml backend/main.go Dockerfile
+          git commit -m "$TITLE"
+          git push --force origin "HEAD:refs/heads/$BOT_BRANCH"
+
+          row() {
+            local name="$1" repo="$2" old="$3" new="$4" link="-"
+            [ "$old" != "$new" ] && link="[v$new](https://github.com/$repo/releases/tag/v$new)"
+            echo "| $name | $old | $new | $link |"
+          }
+          {
+            echo "Automated bump of the upstream Artifact Keeper images pinned in \`docker-compose.yaml\`."
+            echo
+            echo "| Component | Old | New | Release |"
+            echo "|---|---|---|---|"
+            row "backend (\`artifactkeeper/backend\`)" artifact-keeper/artifact-keeper "$BACKEND_OLD" "$BACKEND_NEW"
+            row "web (\`artifactkeeper/web\`)" artifact-keeper/artifact-keeper-web "$WEB_OLD" "$WEB_NEW"
+            echo
+            echo "Extension version: \`$EXT_OLD\` -> \`$EXT_NEW\` (\`backend/main.go\`, changelog LABEL in \`Dockerfile\`)."
+            echo
+            echo "Validated in [this run]($RUN_URL):"
+            echo "- extension image builds (linux/amd64) and metadata/LABEL check passes"
+            echo "- compose smoke test with the new pins: backend \`/health\` and web \`/\` respond"
+            echo
+            echo "CI does not run on this PR automatically (it was pushed with \`GITHUB_TOKEN\`); the checks above ran in the bump workflow."
+            echo
+            echo "Merging this PR triggers the release workflow, which publishes \`artifactkeeper/docker-desktop:$EXT_NEW\` and \`latest\` and creates the \`v$EXT_NEW\` GitHub release."
+          } > "$RUNNER_TEMP/pr-body.md"
+
+          gh label create upstream-bump --color 0e8a16 \
+            --description "Automated upstream version bump" 2>/dev/null || true
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
+            gh pr edit "$PR_NUMBER" --add-label upstream-bump || true
+            echo "Updated PR #$PR_NUMBER"
+          else
+            gh pr create --base main --head "$BOT_BRANCH" --title "$TITLE" \
+              --body-file "$RUNNER_TEMP/pr-body.md" --label upstream-bump \
+              || gh pr create --base main --head "$BOT_BRANCH" --title "$TITLE" \
+                --body-file "$RUNNER_TEMP/pr-body.md"
+          fi

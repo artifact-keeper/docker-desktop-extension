@@ -1,0 +1,29 @@
+# Compose override for the CI smoke test of the pinned upstream stack.
+# Used together with the repo's docker-compose.yaml by .github/smoke/smoke.sh.
+#
+# - extension-service is moved to an inactive profile: it needs the Docker
+#   Desktop guest-services socket and only generates the admin password.
+# - smoke-seed takes its place and writes /data/config/admin_password, which
+#   the backend entrypoint waits for.
+services:
+  extension-service:
+    profiles: ["docker-desktop-only"]
+
+  smoke-seed:
+    image: alpine:3.20
+    command: ["sh", "-c", "printf '%s' \"$$SMOKE_ADMIN_PASSWORD\" > /data/config/admin_password && chmod 644 /data/config/admin_password"]
+    environment:
+      SMOKE_ADMIN_PASSWORD: ${SMOKE_ADMIN_PASSWORD:-smoke-test-admin-password}
+    volumes:
+      - ak-ext-config:/data/config
+    networks:
+      - ak-ext
+
+  backend:
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      smoke-seed:
+        condition: service_completed_successfully

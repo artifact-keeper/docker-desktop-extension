@@ -111,6 +111,21 @@ Compose Services:
 make push-extension
 ```
 
+### Automation
+
+Three GitHub Actions workflows keep the extension current:
+
+- **CI** (`ci.yml`): on every PR and push to `main`, builds the extension image, checks `metadata.json` and the extension LABELs, and runs a compose smoke test of the pinned backend/web stack (`.github/smoke/smoke.sh`, also runnable locally).
+- **Upstream bump** (`upstream-bump.yml`): every 6 hours (or on demand) runs `scripts/upstream-bump.sh` to find new `artifact-keeper` / `artifact-keeper-web` releases. If the matching Docker Hub images exist, it updates `docker-compose.yaml`, bumps the patch version in `backend/main.go`, adds a changelog entry, builds and smoke-tests, then opens or updates a PR from the `bot/upstream-bump` branch.
+- **Release** (`release.yml`): on merge to `main`, if `artifactkeeper/docker-desktop:<version>` is not on Docker Hub yet, pushes `<version>` and `latest` (amd64 + arm64) and creates the `v<version>` GitHub release. Needs the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repo secrets.
+
+Trigger a bump by hand (omit either flag to use the latest release), or check locally without editing:
+
+```bash
+gh workflow run upstream-bump.yml -f backend_version=1.11.10 -f web_version=1.11.2
+scripts/upstream-bump.sh --check
+```
+
 ## Links
 
 - [Artifact Keeper](https://artifactkeeper.com)

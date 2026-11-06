@@ -56,7 +56,7 @@ services:
           memory: 512m
 
   backend:
-    image: artifactkeeper/backend:1.11.10
+    image: artifactkeeper/backend:1.11.12
     restart: unless-stopped
     depends_on:
       postgres:
